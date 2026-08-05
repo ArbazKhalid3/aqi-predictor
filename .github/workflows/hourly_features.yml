@@ -16,12 +16,14 @@ jobs:
           python-version: '3.11'
 
       - name: Install dependencies
-        run: pip install requests pandas python-dotenv
+        run: pip install requests pandas python-dotenv hopsworks confluent-kafka
 
       - name: Run feature pipeline
         env:
           AQICN_TOKEN: ${{ secrets.AQICN_TOKEN }}
           OPENWEATHER_API_KEY: ${{ secrets.OPENWEATHER_API_KEY }}
+          HOPSWORKS_API_KEY: ${{ secrets.HOPSWORKS_API_KEY }}
+          HOPSWORKS_PROJECT_NAME: ${{ secrets.HOPSWORKS_PROJECT_NAME }}
         run: |
           cd scripts
           python3 build_features.py
