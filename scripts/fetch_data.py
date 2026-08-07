@@ -72,8 +72,22 @@ def calculate_aqi(pm25, pm10):
     for now since they dominate AQI in Pakistan and are the most reliably
     available; CO/NO2/SO2/O3 breakpoints can be added the same way later.
     """
+    # EPA's official method truncates PM2.5 to 1 decimal and PM10 to a whole
+    # number BEFORE the breakpoint lookup. Skipping this left small gaps
+    # between consecutive brackets (e.g. PM10=154.2 matched nothing between
+    # the 154 and 155 boundaries) that fell through to the 500 fallback --
+    # producing false "hazardous" spikes that were really just rounding gaps.
+    # pandas NaN (from missing CSV values) isn't caught by "is not None",
+    # so check for it explicitly -- otherwise int(NaN) crashes.
+    import math
+    pm25_valid = pm25 is not None and not (isinstance(pm25, float) and math.isnan(pm25))
+    pm10_valid = pm10 is not None and not (isinstance(pm10, float) and math.isnan(pm10))
+
+    pm25_trunc = int(pm25 * 10) / 10 if pm25_valid else None
+    pm10_trunc = int(pm10) if pm10_valid else None
+
     sub_indices = [
-        i for i in [_sub_aqi(pm25, PM25_BREAKPOINTS), _sub_aqi(pm10, PM10_BREAKPOINTS)]
+        i for i in [_sub_aqi(pm25_trunc, PM25_BREAKPOINTS), _sub_aqi(pm10_trunc, PM10_BREAKPOINTS)]
         if i is not None
     ]
     return max(sub_indices) if sub_indices else None
