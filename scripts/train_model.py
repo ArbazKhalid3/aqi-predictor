@@ -40,7 +40,7 @@ def build_training_set(df):
     are dropped -- this is why early runs will have few/zero rows.
     """
     df = df.copy()
-    df["timestamp"] = pd.to_datetime(df["timestamp"])
+    df["timestamp"] = pd.to_datetime(df["timestamp"], format="mixed")
     training_rows = []
 
     for city, group in df.groupby("city"):
