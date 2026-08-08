@@ -11,7 +11,7 @@ sns.set_theme(style="darkgrid")
 pd.set_option("display.max_columns", None)
 
 df = pd.read_csv("../data/features.csv")
-df["timestamp"] = pd.to_datetime(df["timestamp"])
+df["timestamp"] = pd.to_datetime(df["timestamp"], format="mixed")
 print(f"Loaded {len(df)} rows, {df['city'].nunique()} cities")
 df.head()
 
@@ -143,3 +143,44 @@ print("\nSpikes grouped by rounded hour (are many cities spiking at the SAME tim
 spikes_copy = spikes.copy()
 spikes_copy["hour_bucket"] = spikes_copy["timestamp"].dt.floor("h")
 print(spikes_copy.groupby("hour_bucket")["city"].apply(list))
+
+# %%
+# Weather vs AQI relationships -- do temperature, humidity, and wind
+# actually show visible patterns with AQI, or is the correlation too
+# weak to matter? Scatter plots make this easier to judge than raw
+# correlation numbers alone.
+fig, axes = plt.subplots(1, 3, figsize=(18, 5))
+
+axes[0].scatter(df["temp_c"], df["aqi"], alpha=0.3, s=15)
+axes[0].set_xlabel("Temperature (°C)")
+axes[0].set_ylabel("AQI")
+axes[0].set_title("Temperature vs AQI")
+
+axes[1].scatter(df["humidity"], df["aqi"], alpha=0.3, s=15, color="steelblue")
+axes[1].set_xlabel("Humidity (%)")
+axes[1].set_ylabel("AQI")
+axes[1].set_title("Humidity vs AQI")
+
+axes[2].scatter(df["wind_speed"], df["aqi"], alpha=0.3, s=15, color="seagreen")
+axes[2].set_xlabel("Wind Speed (m/s)")
+axes[2].set_ylabel("AQI")
+axes[2].set_title("Wind Speed vs AQI")
+
+plt.tight_layout()
+plt.savefig("plots_weather_scatter.png", dpi=100)
+plt.show()
+
+# %%
+# Day-of-week pattern -- do weekdays (more traffic/industry) show higher
+# AQI than weekends? Relevant given Pakistan's Friday-Saturday or
+# Saturday-Sunday weekend patterns vary by sector.
+day_names = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+dow_avg = df.groupby("day_of_week")["aqi"].mean()
+plt.figure(figsize=(8, 5))
+plt.bar([day_names[i] for i in dow_avg.index], dow_avg.values, color="coral")
+plt.ylabel("Average AQI")
+plt.title("Average AQI by Day of Week")
+plt.tight_layout()
+plt.savefig("plots_day_of_week.png", dpi=100)
+plt.show()
+print(dow_avg)
