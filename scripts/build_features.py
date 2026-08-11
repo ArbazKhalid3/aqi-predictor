@@ -37,7 +37,7 @@ def build_row(city_info):
         return None
 
     components = pollution["components"]
-    computed_aqi = calculate_aqi(components.get("pm2_5"), components.get("pm10"))
+    computed_aqi = calculate_aqi(components.get("pm2_5"), components.get("pm10"), city=city)
 
     reference_aqi = None
     if city in AQICN_STATION_UIDS:

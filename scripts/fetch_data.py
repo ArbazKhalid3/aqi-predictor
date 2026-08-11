@@ -12,8 +12,19 @@ Validation source (4 cities only): AQICN, using real known station UIDs
   sanity-check our computed AQI against real ground-station readings for
   Karachi, Lahore, Islamabad, Peshawar -- the only cities AQICN actually
   covers in Pakistan.
+
+CALIBRATION (added after a week of comparison data, see
+notebooks/calibration_analysis.py): the 4 validated cities showed large,
+CITY-SPECIFIC bias between computed and real AQI (Karachi -91, Lahore +94,
+Peshawar +117, Islamabad -8.5). A single global correction formula does
+NOT generalize (R^2=0.139 when fit across all 4), so we apply a per-city
+offset ONLY to these 4 known cities. The other 26 cities have no ground
+truth station, so their bias is unknown and we do NOT guess a correction
+for them -- applying one city's known bias to an unvalidated city would be
+unjustified and could make accuracy worse, not better.
 """
 import os
+import math
 import requests
 from dotenv import load_dotenv
 
@@ -30,6 +41,17 @@ AQICN_STATION_UIDS = {
     "Lahore": 11765,
     "Islamabad": 11739,
     "Peshawar": 11791,
+}
+
+# Per-city correction: real_aqi ~ computed_aqi - bias, i.e. we SUBTRACT the
+# mean bias (computed - real) found in calibration_analysis.py to move our
+# computed value toward the real station reading. Based on ~118 hourly
+# comparison points per city collected Aug 4-11.
+CALIBRATION_OFFSETS = {
+    "Karachi": -91.3,     # computed ran ~91 pts too LOW -> ADD 91 (subtracting a negative)
+    "Lahore": 93.8,        # computed ran ~94 pts too HIGH -> SUBTRACT 94
+    "Peshawar": 116.8,     # computed ran ~117 pts too HIGH -> SUBTRACT 117
+    "Islamabad": -8.5,     # small bias, minor correction
 }
 
 # EPA breakpoint tables: (C_low, C_high, AQI_low, AQI_high)
@@ -65,21 +87,18 @@ def _sub_aqi(concentration, breakpoints):
     return 500  # above scale -> cap at hazardous max
 
 
-def calculate_aqi(pm25, pm10):
+def calculate_aqi(pm25, pm10, city=None):
     """
     Overall AQI = the WORST (max) of the individual pollutant sub-indices --
     this is the real EPA methodology, not an average. Using only PM2.5/PM10
     for now since they dominate AQI in Pakistan and are the most reliably
     available; CO/NO2/SO2/O3 breakpoints can be added the same way later.
+
+    If `city` is one of the 4 validated cities, applies that city's known
+    calibration offset (see CALIBRATION_OFFSETS above). Otherwise returns
+    the raw uncalibrated value -- we do not guess a correction for cities
+    with no ground-truth validation data.
     """
-    # EPA's official method truncates PM2.5 to 1 decimal and PM10 to a whole
-    # number BEFORE the breakpoint lookup. Skipping this left small gaps
-    # between consecutive brackets (e.g. PM10=154.2 matched nothing between
-    # the 154 and 155 boundaries) that fell through to the 500 fallback --
-    # producing false "hazardous" spikes that were really just rounding gaps.
-    # pandas NaN (from missing CSV values) isn't caught by "is not None",
-    # so check for it explicitly -- otherwise int(NaN) crashes.
-    import math
     pm25_valid = pm25 is not None and not (isinstance(pm25, float) and math.isnan(pm25))
     pm10_valid = pm10 is not None and not (isinstance(pm10, float) and math.isnan(pm10))
 
@@ -90,7 +109,16 @@ def calculate_aqi(pm25, pm10):
         i for i in [_sub_aqi(pm25_trunc, PM25_BREAKPOINTS), _sub_aqi(pm10_trunc, PM10_BREAKPOINTS)]
         if i is not None
     ]
-    return max(sub_indices) if sub_indices else None
+    if not sub_indices:
+        return None
+
+    raw_aqi = max(sub_indices)
+
+    if city in CALIBRATION_OFFSETS:
+        corrected = raw_aqi - CALIBRATION_OFFSETS[city]
+        return max(0, round(corrected))  # clamp at 0, AQI can't go negative
+
+    return raw_aqi
 
 
 def fetch_openweather_pollution(lat, lon):
@@ -99,7 +127,7 @@ def fetch_openweather_pollution(lat, lon):
     params = {"lat": lat, "lon": lon, "appid": OPENWEATHER_API_KEY}
     resp = requests.get(url, params=params, timeout=10)
     resp.raise_for_status()
-    return resp.json()["list"][0]  # components + OpenWeather's own 1-5 index
+    return resp.json()["list"][0]
 
 
 def fetch_openweather_weather(lat, lon):
@@ -134,13 +162,9 @@ if __name__ == "__main__":
 
     pollution = fetch_openweather_pollution(test_city["lat"], test_city["lon"])
     components = pollution["components"]
-    computed_aqi = calculate_aqi(components.get("pm2_5"), components.get("pm10"))
+    computed_aqi = calculate_aqi(components.get("pm2_5"), components.get("pm10"), city=test_city["city"])
     print("PM2.5:", components.get("pm2_5"), "  PM10:", components.get("pm10"))
-    print("Computed EPA AQI:", computed_aqi)
-    print("OpenWeather's own 1-5 index:", pollution["main"]["aqi"])
+    print("Computed EPA AQI (calibrated):", computed_aqi)
 
     real_aqi = fetch_aqicn_validation(test_city["city"])
     print("AQICN ground-station AQI (validation):", real_aqi)
-
-    weather = fetch_openweather_weather(test_city["lat"], test_city["lon"])
-    print("Temp (°C):", weather["main"]["temp"])
