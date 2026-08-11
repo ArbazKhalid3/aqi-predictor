@@ -4,7 +4,9 @@ Training pipeline:
 2. Builds the actual prediction target: AQI N hours in the future, per city,
    using real elapsed time (not just "next row") so it stays correct even
    if the hourly schedule has gaps or irregular timestamps.
-3. Trains + evaluates a few models, picks the best by RMSE.
+3. Trains + evaluates several models (RandomForest, Ridge, XGBoost), picks
+   the best by RMSE -- per the brief's request for "a variety of forecasting
+   models, from statistical modelling to deep learning."
 4. Saves the trained model to the model registry (local file for now --
    we'll swap this for Hopsworks once the pipeline logic is proven).
 """
@@ -13,15 +15,13 @@ import numpy as np
 import joblib
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.linear_model import Ridge
+from xgboost import XGBRegressor
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 
 FEATURES_CSV = "../data/features.csv"
 MODEL_OUT = "../data/model.joblib"
 
-# Brief asks for a 3-day-ahead forecast. Kept as a constant so it's easy
-# to shrink temporarily (e.g. to 1 hour) just to test the pipeline logic
-# early, before we have 3 real days of history.
 FORECAST_HORIZON_HOURS = 72
 
 FEATURE_COLUMNS = [
@@ -33,12 +33,6 @@ FEATURE_COLUMNS = [
 
 
 def build_training_set(df):
-    """
-    For each city, match every row to the reading closest to
-    (its timestamp + FORECAST_HORIZON_HOURS) and use that future AQI as
-    the label. Rows with no valid future match (not enough history yet)
-    are dropped -- this is why early runs will have few/zero rows.
-    """
     df = df.copy()
     df["timestamp"] = pd.to_datetime(df["timestamp"], format="mixed")
     training_rows = []
@@ -47,7 +41,6 @@ def build_training_set(df):
         group = group.sort_values("timestamp").reset_index(drop=True)
         for i, row in group.iterrows():
             target_time = row["timestamp"] + pd.Timedelta(hours=FORECAST_HORIZON_HOURS)
-            # allow a +/- 30 min tolerance window around the target time
             window = group[
                 (group["timestamp"] >= target_time - pd.Timedelta(minutes=30)) &
                 (group["timestamp"] <= target_time + pd.Timedelta(minutes=30))
@@ -64,7 +57,7 @@ def build_training_set(df):
 
 
 def train_and_evaluate(train_df):
-    X = train_df[FEATURE_COLUMNS].fillna(0)  # missing pollutants (e.g. Karachi's O3) -> 0 for now
+    X = train_df[FEATURE_COLUMNS].fillna(0)
     y = train_df["target_aqi"]
 
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
@@ -72,6 +65,7 @@ def train_and_evaluate(train_df):
     models = {
         "RandomForest": RandomForestRegressor(n_estimators=200, random_state=42),
         "Ridge": Ridge(alpha=1.0),
+        "XGBoost": XGBRegressor(n_estimators=200, max_depth=5, learning_rate=0.1, random_state=42),
     }
 
     results = {}
