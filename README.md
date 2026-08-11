@@ -15,6 +15,9 @@ A serverless, end-to-end air quality forecasting system built for the 10Pearls i
 - Displays live readings, historical trends, and 3-day forecasts on an interactive map-based dashboard
 
 ## Architecture
+
+OpenWeather API + AQICN API feed an hourly feature pipeline (automated via GitHub Actions), which writes to both a Hopsworks feature store and a local CSV. That data feeds a RandomForest training pipeline, which powers the live Streamlit dashboard's forecast.
+
 ## Project structure
 
 - `scripts/` — data fetching, feature engineering, model training, SHAP explainability, calibration analysis
