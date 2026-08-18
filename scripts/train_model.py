@@ -1,14 +1,12 @@
 """
-Training pipeline:
-1. Loads historical (features, targets) from our feature store (features.csv for now).
-2. Builds the actual prediction target: AQI N hours in the future, per city,
-   using real elapsed time (not just "next row") so it stays correct even
-   if the hourly schedule has gaps or irregular timestamps.
-3. Trains + evaluates several models (RandomForest, Ridge, XGBoost), picks
-   the best by RMSE -- per the brief's request for "a variety of forecasting
-   models, from statistical modelling to deep learning."
-4. Saves the trained model to the model registry (local file for now --
-   we'll swap this for Hopsworks once the pipeline logic is proven).
+Training pipeline -- now trains THREE models, one per forecast horizon
+(24h/48h/72h), per the brief's request to predict "the next 3 days"
+(interpreted as a day-by-day forecast, not a single 72h-ahead number).
+
+1. Loads historical (features, targets) from our feature store.
+2. For each horizon, builds (features, target) pairs and trains
+   RandomForest, Ridge, and XGBoost, picking the best by RMSE.
+3. Saves all three horizon models together in one file, keyed by horizon.
 """
 import pandas as pd
 import numpy as np
@@ -22,7 +20,7 @@ from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 FEATURES_CSV = "../data/features.csv"
 MODEL_OUT = "../data/model.joblib"
 
-FORECAST_HORIZON_HOURS = 72
+FORECAST_HORIZONS_HOURS = [24, 48, 72]  # Day 1, Day 2, Day 3
 
 FEATURE_COLUMNS = [
     "hour", "day", "month", "day_of_week",
@@ -32,7 +30,7 @@ FEATURE_COLUMNS = [
 ]
 
 
-def build_training_set(df):
+def build_training_set(df, horizon_hours):
     df = df.copy()
     df["timestamp"] = pd.to_datetime(df["timestamp"], format="mixed")
     training_rows = []
@@ -40,35 +38,30 @@ def build_training_set(df):
     for city, group in df.groupby("city"):
         group = group.sort_values("timestamp").reset_index(drop=True)
         for i, row in group.iterrows():
-            target_time = row["timestamp"] + pd.Timedelta(hours=FORECAST_HORIZON_HOURS)
+            target_time = row["timestamp"] + pd.Timedelta(hours=horizon_hours)
             window = group[
                 (group["timestamp"] >= target_time - pd.Timedelta(minutes=30)) &
                 (group["timestamp"] <= target_time + pd.Timedelta(minutes=30))
             ]
             if window.empty:
                 continue
-            future_aqi = window.iloc[0]["aqi"]
-
             feature_row = row[FEATURE_COLUMNS].to_dict()
-            feature_row["target_aqi"] = future_aqi
+            feature_row["target_aqi"] = window.iloc[0]["aqi"]
             training_rows.append(feature_row)
 
     return pd.DataFrame(training_rows)
 
 
-def train_and_evaluate(train_df):
+def train_and_evaluate(train_df, horizon_hours):
     X = train_df[FEATURE_COLUMNS].fillna(0)
     y = train_df["target_aqi"]
 
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
     models = {
-       "RandomForest": RandomForestRegressor(
-            n_estimators=100,       # fewer trees -- halves model file size, minimal accuracy cost
-            max_depth=15,           # caps tree depth -- keeps file size bounded as data keeps growing
-            min_samples_leaf=3,     # slightly smoother trees, also reduces overfitting risk
-            random_state=42,
-      ),
+        "RandomForest": RandomForestRegressor(
+            n_estimators=100, max_depth=15, min_samples_leaf=3, random_state=42,
+        ),
         "Ridge": Ridge(alpha=1.0),
         "XGBoost": XGBRegressor(n_estimators=200, max_depth=5, learning_rate=0.1, random_state=42),
     }
@@ -81,10 +74,10 @@ def train_and_evaluate(train_df):
         mae = mean_absolute_error(y_test, preds)
         r2 = r2_score(y_test, preds)
         results[name] = {"model": model, "rmse": rmse, "mae": mae, "r2": r2}
-        print(f"{name}: RMSE={rmse:.2f}  MAE={mae:.2f}  R2={r2:.3f}")
+        print(f"  {name}: RMSE={rmse:.2f}  MAE={mae:.2f}  R2={r2:.3f}")
 
     best_name = min(results, key=lambda n: results[n]["rmse"])
-    print(f"\nBest model: {best_name}")
+    print(f"  Best for {horizon_hours}h: {best_name}")
     return results[best_name]["model"], best_name
 
 
@@ -92,22 +85,27 @@ def run():
     df = pd.read_csv(FEATURES_CSV)
     print(f"Loaded {len(df)} raw rows from feature store.")
 
-    train_df = build_training_set(df)
-    print(f"Built {len(train_df)} (features, target) training rows "
-          f"[needs pairs {FORECAST_HORIZON_HOURS}h apart per city].")
+    all_models = {}
+    for horizon in FORECAST_HORIZONS_HOURS:
+        print(f"\n=== Training {horizon}h-ahead model ===")
+        train_df = build_training_set(df, horizon)
+        print(f"Built {len(train_df)} training rows for {horizon}h horizon.")
 
-    if len(train_df) < 20:
-        print(
-            f"\nNot enough historical data yet to train a real model. "
-            f"Need more hourly runs to accumulate before pairs {FORECAST_HORIZON_HOURS}h "
-            f"apart exist. Let the GitHub Actions pipeline keep running and re-run this "
-            f"script again in a few days."
-        )
+        if len(train_df) < 20:
+            print(f"Not enough data yet for {horizon}h horizon, skipping.")
+            continue
+
+        best_model, best_name = train_and_evaluate(train_df, horizon)
+        all_models[horizon] = {"model": best_model, "name": best_name, "features": FEATURE_COLUMNS}
+
+    if not all_models:
+        print("\nNo horizon had enough data to train. Let the pipeline keep running.")
         return
 
-    best_model, best_name = train_and_evaluate(train_df)
-    joblib.dump({"model": best_model, "name": best_name, "features": FEATURE_COLUMNS}, MODEL_OUT)
-    print(f"Saved best model ({best_name}) to {MODEL_OUT}")
+    joblib.dump(all_models, MODEL_OUT)
+    print(f"\nSaved {len(all_models)} horizon model(s) to {MODEL_OUT}")
+    for h, info in all_models.items():
+        print(f"  {h}h -> {info['name']}")
 
 
 if __name__ == "__main__":

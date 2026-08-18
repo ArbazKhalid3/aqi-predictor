@@ -1,10 +1,7 @@
 """
-Pearls AQI Predictor -- dashboard (Step 6, with real 3-day forecast).
-
-Shows the latest real reading per city, plus an actual model-predicted
-AQI 72 hours ahead using the trained RandomForest model. Falls back to
-the "still accumulating data" message if the model file doesn't exist
-yet (keeps the app from crashing for anyone running it before training).
+Pearls AQI Predictor -- dashboard with a real 3-DAY forecast (one
+prediction per day, using three separately trained horizon models --
+24h/48h/72h -- rather than a single distant number).
 """
 import os
 import pandas as pd
@@ -35,15 +32,15 @@ def load_data():
 
 
 @st.cache_resource
-def load_model():
+def load_models():
+    """Returns a dict keyed by horizon hours: {24: {...}, 48: {...}, 72: {...}}"""
     if not os.path.exists(MODEL_PATH):
-        return None, None
-    saved = joblib.load(MODEL_PATH)
-    return saved["model"], saved["name"]
+        return {}
+    return joblib.load(MODEL_PATH)
 
 
 df = load_data()
-model, model_name = load_model()
+horizon_models = load_models()
 
 last_updated = df["timestamp"].max()
 st.caption(f"📡 Data last updated: {last_updated.strftime('%b %d, %Y — %I:%M %p UTC')}")
@@ -128,28 +125,40 @@ fig.add_hline(y=300, line_dash="dot", line_color="purple",
               annotation_text="Hazardous threshold (AQI 300)", annotation_position="top left")
 st.plotly_chart(fig, use_container_width=True)
 
-# --- Real 3-day forecast, using the trained RandomForest model ---
+# --- Real 3-DAY forecast: one card per day, each from its own model ---
 st.subheader("3-Day Forecast")
-if model is None:
+if not horizon_models:
     st.info("Forecast will appear here once enough historical data has been "
-            "collected to train the prediction model (currently accumulating).")
+            "collected to train the prediction models (currently accumulating).")
 else:
     features = latest[FEATURE_COLUMNS].fillna(0).to_frame().T
-    predicted_aqi = model.predict(features)[0]
-    pred_category, pred_color = aqi_category(predicted_aqi)
+    day_labels = {24: "Day 1 (Tomorrow)", 48: "Day 2", 72: "Day 3"}
+    day_dates = {h: (last_updated + pd.Timedelta(hours=h)).strftime("%b %d") for h in [24, 48, 72]}
 
-    f1, f2 = st.columns(2)
-    f1.metric("Predicted AQI (in 3 days)", f"{predicted_aqi:.0f}",
-               delta=f"{predicted_aqi - latest['aqi']:.0f} vs today")
-    f2.metric("Predicted Category", pred_category)
+    cols = st.columns(3)
+    for i, horizon in enumerate([24, 48, 72]):
+        with cols[i]:
+            if horizon not in horizon_models:
+                st.info(f"{day_labels[horizon]}\nNot enough data yet for this horizon.")
+                continue
 
-    if predicted_aqi > 200:
-        st.error(f"⚠️ Forecast: hazardous air quality expected in {city} within 3 days.")
-    elif predicted_aqi > 150:
-        st.warning(f"⚠️ Forecast: unhealthy air quality expected in {city} within 3 days.")
+            model_info = horizon_models[horizon]
+            predicted_aqi = model_info["model"].predict(features)[0]
+            pred_category, pred_color = aqi_category(predicted_aqi)
 
-    st.caption(f"Forecast from a {model_name} model trained on historical AQI, pollutant, "
-               f"and weather patterns. Accuracy improves as more historical data is collected.")
+            st.markdown(f"**{day_labels[horizon]}** — {day_dates[horizon]}")
+            st.metric("Predicted AQI", f"{predicted_aqi:.0f}",
+                       delta=f"{predicted_aqi - latest['aqi']:.0f} vs today")
+            st.write(pred_category)
+            st.caption(f"Model: {model_info['name']}")
+
+            if predicted_aqi > 200:
+                st.error("⚠️ Hazardous")
+            elif predicted_aqi > 150:
+                st.warning("⚠️ Unhealthy")
+
+    st.caption("Each day uses a separately trained model for that specific horizon "
+               "(24h/48h/72h). Accuracy improves as more historical data is collected.")
 
 st.subheader("Current pollutant levels")
 pollutant_cols = ["pm25", "pm10", "co", "no2", "so2", "o3"]
