@@ -63,7 +63,12 @@ def train_and_evaluate(train_df):
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
     models = {
-        "RandomForest": RandomForestRegressor(n_estimators=200, random_state=42),
+       "RandomForest": RandomForestRegressor(
+            n_estimators=100,       # fewer trees -- halves model file size, minimal accuracy cost
+            max_depth=15,           # caps tree depth -- keeps file size bounded as data keeps growing
+            min_samples_leaf=3,     # slightly smoother trees, also reduces overfitting risk
+            random_state=42,
+      ),
         "Ridge": Ridge(alpha=1.0),
         "XGBoost": XGBRegressor(n_estimators=200, max_depth=5, learning_rate=0.1, random_state=42),
     }
