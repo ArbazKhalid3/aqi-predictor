@@ -37,13 +37,13 @@ def load_data():
 @st.cache_resource
 def load_model():
     if not os.path.exists(MODEL_PATH):
-        return None
+        return None, None
     saved = joblib.load(MODEL_PATH)
-    return saved["model"]
+    return saved["model"], saved["name"]
 
 
 df = load_data()
-model = load_model()
+model, model_name = load_model()
 
 last_updated = df["timestamp"].max()
 st.caption(f"📡 Data last updated: {last_updated.strftime('%b %d, %Y — %I:%M %p UTC')}")
@@ -148,8 +148,8 @@ else:
     elif predicted_aqi > 150:
         st.warning(f"⚠️ Forecast: unhealthy air quality expected in {city} within 3 days.")
 
-    st.caption("Forecast from a RandomForest model trained on historical AQI, pollutant, "
-               "and weather patterns. Accuracy improves as more historical data is collected.")
+    st.caption(f"Forecast from a {model_name} model trained on historical AQI, pollutant, "
+               f"and weather patterns. Accuracy improves as more historical data is collected.")
 
 st.subheader("Current pollutant levels")
 pollutant_cols = ["pm25", "pm10", "co", "no2", "so2", "o3"]
