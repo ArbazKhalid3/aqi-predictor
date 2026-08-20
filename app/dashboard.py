@@ -344,7 +344,7 @@ def render_home(df, horizon_models):
         st.info("Forecast will appear here once enough historical data has been "
                 "collected to train the prediction models (currently accumulating).")
     else:
-        features = latest[FEATURE_COLUMNS].fillna(0).to_frame().T
+        features = latest[FEATURE_COLUMNS].fillna(0).astype(float).to_frame().T
         day_labels = {24: "Day 1 (Tomorrow)", 48: "Day 2", 72: "Day 3"}
         day_dates = {h: (last_updated + pd.Timedelta(hours=h)).strftime("%b %d") for h in [24, 48, 72]}
 
