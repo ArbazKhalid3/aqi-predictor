@@ -1,12 +1,15 @@
 """
-Training pipeline -- now trains THREE models, one per forecast horizon
-(24h/48h/72h), per the brief's request to predict "the next 3 days"
-(interpreted as a day-by-day forecast, not a single 72h-ahead number).
+Training pipeline -- trains THREE models per forecast horizon (24h/48h/72h),
+per the brief's request to predict "the next 3 days" (interpreted as a
+day-by-day forecast, not a single 72h-ahead number).
 
 1. Loads historical (features, targets) from our feature store.
 2. For each horizon, builds (features, target) pairs and trains
    RandomForest, Ridge, and XGBoost, picking the best by RMSE.
 3. Saves all three horizon models together in one file, keyed by horizon.
+4. Saves EVERY model's metrics (not just the winner) to
+   ../data/model_metrics.csv, so the dashboard's Model Performance page
+   can show a real comparison instead of a placeholder.
 """
 import pandas as pd
 import numpy as np
@@ -19,6 +22,7 @@ from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 
 FEATURES_CSV = "../data/features.csv"
 MODEL_OUT = "../data/model.joblib"
+METRICS_OUT = "../data/model_metrics.csv"
 
 FORECAST_HORIZONS_HOURS = [24, 48, 72]  # Day 1, Day 2, Day 3
 
@@ -62,11 +66,12 @@ def train_and_evaluate(train_df, horizon_hours):
         "RandomForest": RandomForestRegressor(
             n_estimators=100, max_depth=15, min_samples_leaf=3, random_state=42,
         ),
-        "Ridge": Ridge(alpha=1.0),
+        "Ridge Regression": Ridge(alpha=1.0),
         "XGBoost": XGBRegressor(n_estimators=200, max_depth=5, learning_rate=0.1, random_state=42),
     }
 
     results = {}
+    metrics_rows = []
     for name, model in models.items():
         model.fit(X_train, y_train)
         preds = model.predict(X_test)
@@ -74,11 +79,12 @@ def train_and_evaluate(train_df, horizon_hours):
         mae = mean_absolute_error(y_test, preds)
         r2 = r2_score(y_test, preds)
         results[name] = {"model": model, "rmse": rmse, "mae": mae, "r2": r2}
+        metrics_rows.append({"horizon": horizon_hours, "model": name, "r2": round(r2, 4), "mae": round(mae, 2), "rmse": round(rmse, 2)})
         print(f"  {name}: RMSE={rmse:.2f}  MAE={mae:.2f}  R2={r2:.3f}")
 
     best_name = min(results, key=lambda n: results[n]["rmse"])
     print(f"  Best for {horizon_hours}h: {best_name}")
-    return results[best_name]["model"], best_name
+    return results[best_name]["model"], best_name, metrics_rows
 
 
 def run():
@@ -86,6 +92,7 @@ def run():
     print(f"Loaded {len(df)} raw rows from feature store.")
 
     all_models = {}
+    all_metrics = []
     for horizon in FORECAST_HORIZONS_HOURS:
         print(f"\n=== Training {horizon}h-ahead model ===")
         train_df = build_training_set(df, horizon)
@@ -95,8 +102,9 @@ def run():
             print(f"Not enough data yet for {horizon}h horizon, skipping.")
             continue
 
-        best_model, best_name = train_and_evaluate(train_df, horizon)
+        best_model, best_name, metrics_rows = train_and_evaluate(train_df, horizon)
         all_models[horizon] = {"model": best_model, "name": best_name, "features": FEATURE_COLUMNS}
+        all_metrics.extend(metrics_rows)
 
     if not all_models:
         print("\nNo horizon had enough data to train. Let the pipeline keep running.")
@@ -106,6 +114,10 @@ def run():
     print(f"\nSaved {len(all_models)} horizon model(s) to {MODEL_OUT}")
     for h, info in all_models.items():
         print(f"  {h}h -> {info['name']}")
+
+    metrics_df = pd.DataFrame(all_metrics)
+    metrics_df.to_csv(METRICS_OUT, index=False)
+    print(f"Saved metrics for {len(metrics_df)} model/horizon combinations to {METRICS_OUT}")
 
 
 if __name__ == "__main__":
