@@ -1,0 +1,10 @@
+horizon,model,r2,mae,rmse
+24,RandomForest,0.7424,11.93,19.13
+24,Ridge Regression,0.231,24.95,33.05
+24,XGBoost,0.7592,12.55,18.5
+48,RandomForest,0.7392,12.22,19.86
+48,Ridge Regression,0.2446,26.09,33.79
+48,XGBoost,0.706,14.15,21.08
+72,RandomForest,0.7613,12.25,19.25
+72,Ridge Regression,0.2382,26.35,34.39
+72,XGBoost,0.7503,13.41,19.69
