@@ -1,0 +1,32 @@
+name: Retrain Models
+
+on:
+  schedule:
+    - cron: '0 6 */4 * *'   # every 4 days at 06:00 UTC
+  workflow_dispatch:        # lets you trigger it manually from GitHub's UI too
+
+jobs:
+  retrain:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install pandas numpy joblib scikit-learn xgboost
+
+      - name: Train models
+        run: |
+          cd scripts
+          python3 train_model.py
+
+      - name: Commit updated model
+        run: |
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git add data/model.joblib
+          git diff --staged --quiet || git commit -m "Auto-retrain models $(date -u)"
+          git push
