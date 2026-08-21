@@ -483,7 +483,7 @@ def render_health_advice(df):
 
 def render_model_performance():
     st.title("📈 Model Performance")
-    st.caption("Comparison of the 4 forecasting approaches evaluated for this project.")
+    st.caption("Comparison of the 3 forecasting approaches used in production for this project.")
 
     metrics_df = load_metrics()
 
