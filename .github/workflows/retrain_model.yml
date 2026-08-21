@@ -29,4 +29,5 @@ jobs:
           git config user.email "actions@github.com"
           git add data/model.joblib data/model_metrics.csv
           git diff --staged --quiet || git commit -m "Auto-retrain models $(date -u)"
+          git pull --rebase origin main
           git push
