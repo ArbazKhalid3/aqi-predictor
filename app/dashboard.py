@@ -29,30 +29,37 @@ st.set_page_config(page_title="Pakistan AQI Predictor", page_icon="🌫️", lay
 
 st.markdown("""
 <style>
-.stTabs [data-baseweb="tab-list"] {
-    gap: 8px;
-    border-bottom: 2px solid rgba(255,255,255,0.1);
+.stTabs [role="tablist"] {
+    gap: 10px;
+    border-bottom: none;
+    flex-wrap: wrap;
 }
-.stTabs [data-baseweb="tab"] {
-    height: 56px !important;
+.stTabs [role="tab"] {
+    height: 52px !important;
     padding: 0 26px !important;
-    border-radius: 10px 10px 0 0;
+    border-radius: 26px !important;
+    border: 1px solid rgba(255,255,255,0.18) !important;
+    background: transparent !important;
 }
-.stTabs [data-baseweb="tab"] p,
-.stTabs [data-baseweb="tab"] div,
-.stTabs [data-baseweb="tab"] span {
-    font-size: 1.25rem !important;
+.stTabs [role="tab"] p,
+.stTabs [role="tab"] div,
+.stTabs [role="tab"] span {
+    font-size: 1.05rem !important;
     font-weight: 600 !important;
+    color: rgba(255,255,255,0.85) !important;
 }
 .stTabs [aria-selected="true"] {
-    background: rgba(100,150,255,0.15) !important;
-    border-bottom: 4px solid #4f8cff !important;
+    background: #1b4f5c !important;
+    border: 1px solid #1b4f5c !important;
 }
 .stTabs [aria-selected="true"] p,
 .stTabs [aria-selected="true"] div,
 .stTabs [aria-selected="true"] span {
-    color: #6fa8ff !important;
-    font-weight: 800 !important;
+    color: #ffffff !important;
+    font-weight: 700 !important;
+}
+.stTabs .react-aria-SelectionIndicator {
+    display: none !important;
 }
 .card {
     background: rgba(255,255,255,0.03);
@@ -82,12 +89,79 @@ st.markdown("""
     background: rgba(255,180,0,0.12); border: 1px solid rgba(255,180,0,0.35);
     color: #ffb800;
 }
+.hero-box {
+    background: linear-gradient(135deg, #12343b, #1b4f5c);
+    border-radius: 14px;
+    padding: 36px 40px;
+    margin: 20px 0 28px 0;
+}
+.hero-badge {
+    display: inline-block; font-size: 0.78em; font-weight: 700;
+    letter-spacing: 0.06em; color: #6fd9c4;
+    background: rgba(111,217,196,0.12);
+    border: 1px solid rgba(111,217,196,0.35);
+    padding: 4px 12px; border-radius: 20px; margin-bottom: 16px;
+}
+.hero-headline {
+    font-size: 2.1em; font-weight: 800; color: #ffffff;
+    line-height: 1.25; margin-bottom: 14px;
+}
+.hero-subtitle {
+    font-size: 1.05em; color: #cfe8e2; opacity: 0.9; max-width: 720px;
+}
 .app-footer {
     margin-top: 48px; padding-top: 16px;
     border-top: 1px solid rgba(255,255,255,0.08);
     font-size: 0.78em; opacity: 0.55; text-align: center;
 }
 .app-footer a { opacity: 0.85; }
+.stTabs [role="tablist"] {
+    display: flex !important;
+    width: 100% !important;
+    gap: 12px !important;
+    border-bottom: none !important;
+    flex-wrap: nowrap !important;
+}
+.stTabs [role="tab"] {
+    flex: 1 1 0 !important;
+    height: 52px !important;
+    border-radius: 26px !important;
+    border: 1px solid rgba(255,255,255,0.35) !important;
+    background: transparent !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+}
+.stTabs [role="tab"] p,
+.stTabs [role="tab"] div,
+.stTabs [role="tab"] span {
+    font-size: 1.05rem !important;
+    font-weight: 600 !important;
+    color: rgba(255,255,255,0.85) !important;
+}
+.stTabs [aria-selected="true"] {
+    background: #1b4f5c !important;
+    border: 1px solid #1b4f5c !important;
+}
+.stTabs [aria-selected="true"] p,
+.stTabs [aria-selected="true"] div,
+.stTabs [aria-selected="true"] span {
+    color: #ffffff !important;
+    font-weight: 700 !important;
+}
+.stTabs .react-aria-SelectionIndicator {
+    display: none !important;
+}
+.app-header-row {
+    display: flex; align-items: center; gap: 14px; margin-bottom: 18px;
+}
+.app-header-badge {
+    width: 46px; height: 46px; border-radius: 10px;
+    background: #1b4f5c; color: #ffffff; font-weight: 800; font-size: 1.1em;
+    display: flex; align-items: center; justify-content: center;
+}
+.app-header-title { font-size: 1.3em; font-weight: 800; color: #ffffff; }
+.app-header-subtitle { font-size: 0.85em; color: rgba(255,255,255,0.6); }
 </style>
 """, unsafe_allow_html=True)
 
@@ -207,6 +281,18 @@ def render_legend():
             )
 
 
+def render_hero():
+    st.markdown(
+        "<div class='hero-box'>"
+        "<div class='hero-badge'>● LIVE SYSTEM · PRODUCTION READY</div>"
+        "<div class='hero-headline'>Air quality forecasting,<br>backed by real ground-truth validation.</div>"
+        "<div class='hero-subtitle'>A serverless AQI forecasting platform covering 30 Pakistani cities — "
+        "combining automated hourly data collection, scheduled model retraining, and a live 3-day forecast.</div>"
+        "</div>",
+        unsafe_allow_html=True,
+    )
+
+
 def render_kpi_row(latest_per_city):
     avg_aqi = latest_per_city["aqi"].mean()
     best = latest_per_city.loc[latest_per_city["aqi"].idxmin()]
@@ -282,11 +368,9 @@ def render_map(latest_per_city):
 
 
 def render_home(df, horizon_models):
-    st.title("🏠 Pakistan AQI Predictor")
-    st.caption("10Pearls Internship Project — real-time AQI with 3-day forecasting")
-
     last_updated = df["timestamp"].max()
     st.caption(f"📡 Data last updated: {last_updated.strftime('%b %d, %Y — %I:%M %p UTC')}")
+    render_hero()
     st.divider()
 
     latest_per_city = (
@@ -399,7 +483,7 @@ def render_home(df, horizon_models):
 
 
 def render_compare(df):
-    st.title("⚖️ Compare Cities")
+    st.markdown("# Compare Cities")
     st.caption("Overlay AQI trends for up to 4 cities side by side.")
 
     all_cities = sorted(df["city"].unique())
@@ -441,7 +525,7 @@ def render_compare(df):
 
 
 def render_health_advice(df):
-    st.title("⚕️ Health Advice")
+    st.title("Health Advice")
     st.caption("What today's AQI category means for you — based on your selected city.")
 
     all_cities = sorted(df["city"].unique())
@@ -482,7 +566,7 @@ def render_health_advice(df):
 
 
 def render_model_performance():
-    st.title("📈 Model Performance")
+    st.title("Model Performance")
     st.caption("Comparison of the 3 forecasting approaches used in production for this project.")
 
     metrics_df = load_metrics()
@@ -521,9 +605,8 @@ def render_model_performance():
 
 
 def render_about():
-    st.title("ℹ️ About")
+    st.title("About")
 
-    st.markdown('<div class="card">', unsafe_allow_html=True)
     st.markdown("""
 ### Pakistan AQI Predictor
 
@@ -539,7 +622,6 @@ machine learning models.
         '<span class="badge">☁️ 100% Serverless</span>',
         unsafe_allow_html=True,
     )
-    st.markdown('</div>', unsafe_allow_html=True)
 
     col1, col2 = st.columns([1, 3])
     with col1:
@@ -571,7 +653,7 @@ Built as a 10Pearls Internship Project
 
 
 def render_methodology():
-    st.title("📋 Methodology")
+    st.title("Methodology")
     st.caption("How the data is collected, calibrated, and turned into a 3-day forecast.")
 
     with st.expander("📡 Data Pipeline", expanded=True):
@@ -637,8 +719,17 @@ intensity even though it isn't a direct input to the AQI formula itself.
 df = load_data()
 horizon_models = load_models()
 
+st.markdown(
+    "<div class='app-header-row'>"
+    "<div class='app-header-badge'>AQ</div>"
+    "<div><div class='app-header-title'>Pakistan AQI Predictor</div>"
+    "<div class='app-header-subtitle'>30 Pakistani Cities · Live AQI · 3-Day Forecasting</div></div>"
+    "</div>",
+    unsafe_allow_html=True,
+)
+
 tab_home, tab_compare, tab_health, tab_perf, tab_about, tab_method = st.tabs(
-    ["🏠 Home", "⚖️ Compare", "⚕️ Health", "📈 Performance", "ℹ️ About", "📋 Methodology"]
+    ["Home", "Compare", "Health", "Performance", "About", "Methodology"]
 )
 
 with tab_home:
